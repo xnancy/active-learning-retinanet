@@ -351,24 +351,16 @@ def main(args=None):
     ## EDITING STARTS HERE 
     # create training set (pool)
     train_annotations = _get_annotations(train_generator)
-    # run all elements of training set through stochastic forward pass of model (TODO) 
-
-    image_names = train_generator.image_names
     # start training: we use num-acquisitions and batch_size 
     for i in range(args.num_acquisitions):
-
-        """
-        nb_MC_samples = 10
-        MC_output = keras.function([training_model.layers[0].input, keras.learning_phase()], [training_model.layers[-1].output])
-
-        learning_phase = True  # use dropout at test time
-        MC_samples = [MC_output([np.ones(1000), learning_phase])[0] for _ in xrange(nb_MC_samples)]
-        MC_samples = np.array(MC_samples)  # [#samples x batch size x #classes]
-        """ 
-        # TODO: run all elements of training set through stochastic forward pass of model (TODO)
         print("THE SIZE IS")
         print(train_generator.size()) 
 
+        # Temp filler 
+        image_names = train_generator.image_names
+        
+        # NOTE: this is the function we actually want to call to get the next batch based on the acquisition function 
+        # TODO: figure out the error 
         # image_names = get_next_batch(train_generator, training_model, train_annotations, args.batch_size)
 
         # create generator from selected batch_indices 
@@ -387,8 +379,6 @@ def main(args=None):
             verbose=1,
             callbacks=callbacks,
         )
-        image_names = get_next_batch(train_generator, training_model, train_annotations, args.batch_size)
-
 
 if __name__ == '__main__':
     main()
