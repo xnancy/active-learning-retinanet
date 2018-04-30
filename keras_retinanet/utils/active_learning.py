@@ -11,11 +11,18 @@ import cv2
 import pickle
 
 # acquisition function values given detections from model and true annotations
-# returns array of acquisition values , file name 
-def acquisition_function(detections, annotations): 
-	print(detections.shape)
-	print(annotations.shape)
-	return np.zeros((2, detections.shape[0]))
+def acquisition_function(detections, annotations, generator): 
+	"""
+        nb_MC_samples = 10
+        MC_output = keras.function([training_model.layers[0].input, keras.learning_phase()], [training_model.layers[-1].output])
+
+        learning_phase = True  # use dropout at test time
+        MC_samples = [MC_output([np.ones(1000), learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        MC_samples = np.array(MC_samples)  # [#samples x batch size x #classes]
+        """ 
+        # TODO: run all elements of training set through stochastic forward pass of model (TODO) and compute acquisition
+	
+	return np.zeros(generator.size())
 
 def create_batch_generator(file_names):
     # create random transform generator for augmenting training data
@@ -79,13 +86,13 @@ def get_next_batch(
     all_detections     = _get_detections(generator, model, score_threshold=score_threshold, max_detections=max_detections, save_path=save_path)
     average_precisions = {}
 
-    acquisitions = acquisition_function(all_detections, all_annotations)
+    acquisitions = acquisition_function(all_detections, all_annotations, generator)
 
     # select pool indices with highest acquisition functions 
     pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
 
     # return names of pool files 
-    return acquisition[1][pool_indices]
+    return generator.image_names[pool_indices]
 
 
     """ 
