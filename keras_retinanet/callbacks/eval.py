@@ -51,7 +51,7 @@ class Evaluate(keras.callbacks.Callback):
             max_detections=self.max_detections,
             save_path=self.save_path
         )
-
+        print(self.generator.size())
         self.mean_ap = sum(average_precisions.values()) / len(average_precisions)
 
         if self.tensorboard is not None and self.tensorboard.writer is not None:

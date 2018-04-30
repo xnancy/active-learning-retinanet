@@ -44,10 +44,14 @@ from ..preprocessing.csv_generator import CSVGenerator
 from ..preprocessing.kitti import KittiGenerator
 from ..preprocessing.open_images import OpenImagesGenerator
 from ..preprocessing.pascal_voc import PascalVocGenerator
+from ..preprocessing.pascal_voc_batch import PascalVocBatchGenerator
+
 from ..utils.anchors import make_shapes_callback, anchor_targets_bbox
 from ..utils.keras_version import check_keras_version
 from ..utils.model import freeze as freeze_model
 from ..utils.transform import random_transform_generator
+from ..utils.eval import _get_annotations, _get_detections
+from ..utils.active_learning import get_next_batch
 
 
 def makedirs(path):
@@ -177,27 +181,8 @@ def create_generators(args):
     else:
         transform_generator = random_transform_generator(flip_x_chance=0.5)
 
-    if args.dataset_type == 'coco':
-        # import here to prevent unnecessary dependency on cocoapi
-        from ..preprocessing.coco import CocoGenerator
-
-        train_generator = CocoGenerator(
-            args.coco_path,
-            'train2017',
-            transform_generator=transform_generator,
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
-
-        validation_generator = CocoGenerator(
-            args.coco_path,
-            'val2017',
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
-    elif args.dataset_type == 'pascal':
+    
+    if args.dataset_type == 'pascal':
         train_generator = PascalVocGenerator(
             args.pascal_path,
             'trainval',
@@ -214,72 +199,10 @@ def create_generators(args):
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side
         )
-    elif args.dataset_type == 'csv':
-        train_generator = CSVGenerator(
-            args.annotations,
-            args.classes,
-            transform_generator=transform_generator,
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
-
-        if args.val_annotations:
-            validation_generator = CSVGenerator(
-                args.val_annotations,
-                args.classes,
-                batch_size=args.batch_size,
-                image_min_side=args.image_min_side,
-                image_max_side=args.image_max_side
-            )
-        else:
-            validation_generator = None
-    elif args.dataset_type == 'oid':
-        train_generator = OpenImagesGenerator(
-            args.main_dir,
-            subset='train',
-            version=args.version,
-            labels_filter=args.labels_filter,
-            annotation_cache_dir=args.annotation_cache_dir,
-            fixed_labels=args.fixed_labels,
-            transform_generator=transform_generator,
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
-
-        validation_generator = OpenImagesGenerator(
-            args.main_dir,
-            subset='validation',
-            version=args.version,
-            labels_filter=args.labels_filter,
-            annotation_cache_dir=args.annotation_cache_dir,
-            fixed_labels=args.fixed_labels,
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
-    elif args.dataset_type == 'kitti':
-        train_generator = KittiGenerator(
-            args.kitti_path,
-            subset='train',
-            transform_generator=transform_generator,
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
-
-        validation_generator = KittiGenerator(
-            args.kitti_path,
-            subset='val',
-            batch_size=args.batch_size,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
     else:
         raise ValueError('Invalid data type received: {}'.format(args.dataset_type))
 
-    return train_generator, validation_generator
+    return train_generator, validation_generator, transform_generator
 
 
 def check_args(parsed_args):
@@ -361,9 +284,9 @@ def parse_args(args):
     parser.add_argument('--random-transform', help='Randomly transform image and annotations.', action='store_true')
     parser.add_argument('--image-min-side', help='Rescale the image so the smallest side is min_side.', type=int, default=800)
     parser.add_argument('--image-max-side', help='Rescale the image if the largest side is larger than max_side.', type=int, default=1333)
+    parser.add_argument('--num-acquisitions', help='Number of acquisitions to run', type=int, default=10)
 
     return check_args(parser.parse_args(args))
-
 
 def main(args=None):
     # parse arguments
@@ -383,7 +306,7 @@ def main(args=None):
     keras.backend.tensorflow_backend.set_session(get_session())
 
     # create the generators
-    train_generator, validation_generator = create_generators(args)
+    train_generator, validation_generator, transform_generator = create_generators(args)
 
     # create the model
     if args.snapshot is not None:
@@ -425,14 +348,47 @@ def main(args=None):
         args,
     )
 
-    # start training
-    training_model.fit_generator(
-        generator=train_generator,
-        steps_per_epoch=args.steps,
-        epochs=args.epochs,
-        verbose=1,
-        callbacks=callbacks,
-    )
+    ## EDITING STARTS HERE 
+    # create training set (pool)
+    train_annotations = _get_annotations(train_generator)
+    # run all elements of training set through stochastic forward pass of model (TODO) 
+
+    image_names = train_generator.image_names
+    # start training: we use num-acquisitions and batch_size 
+    for i in range(args.num_acquisitions):
+
+        """
+        nb_MC_samples = 10
+        MC_output = keras.function([training_model.layers[0].input, keras.learning_phase()], [training_model.layers[-1].output])
+
+        learning_phase = True  # use dropout at test time
+        MC_samples = [MC_output([np.ones(1000), learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        MC_samples = np.array(MC_samples)  # [#samples x batch size x #classes]
+        """ 
+        # TODO: run all elements of training set through stochastic forward pass of model (TODO)
+        print("THE SIZE IS")
+        print(train_generator.size()) 
+
+        # image_names = get_next_batch(train_generator, training_model, train_annotations, args.batch_size)
+
+        # create generator from selected batch_indices 
+        batch_generator = PascalVocBatchGenerator(args.pascal_path,
+            'trainval',
+            image_names,
+            transform_generator=transform_generator,
+            batch_size=args.batch_size,
+            image_min_side=args.image_min_side,
+            image_max_side=args.image_max_side)
+
+        training_model.fit_generator(
+            generator=batch_generator,
+            steps_per_epoch=1,
+            epochs=1,
+            verbose=1,
+            callbacks=callbacks,
+        )
+        image_names = get_next_batch(train_generator, training_model, train_annotations, args.batch_size)
+
 
 if __name__ == '__main__':
     main()
