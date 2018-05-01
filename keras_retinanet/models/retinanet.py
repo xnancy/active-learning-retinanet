@@ -69,7 +69,14 @@ def default_classification_model(
 
     # reshape output and apply sigmoid
     outputs = keras.layers.Reshape((-1, num_classes), name='pyramid_classification_reshape')(outputs)
-    outputs = keras.layers.Activation('sigmoid', name='pyramid_classification_sigmoid')(outputs)
+    
+    # add dropout 1 and dense 
+    outputs = keras.layers.Dropout(0.5)(outputs) 
+    outputs = keras.layers.Dense(1024, activation='sigmoid') 
+
+    # add dropout 2
+    outputs = keras.layers.Dropout(0.5)(outputs) 
+    outputs = keras.Dense(num_classes, activation='sigmoid', name='pyramid_classification_sigmoid')(outputs)
 
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
