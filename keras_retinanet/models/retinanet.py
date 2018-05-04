@@ -71,13 +71,13 @@ def default_classification_model(
     outputs = keras.layers.Reshape((-1, num_classes), name='pyramid_classification_reshape')(outputs)
     
     # add dropout 1 and dense 
-    outputs = keras.layers.Dropout(0.5)(outputs) 
-    outputs = keras.layers.Dense(1024, activation='sigmoid') 
+    # outputs = keras.layers.Dropout(0.5)(outputs) 
+    # outputs = keras.layers.Dense(1024, activation='sigmoid')(outputs)
 
     # add dropout 2
-    outputs = keras.layers.Dropout(0.5)(outputs) 
-    outputs = keras.Dense(num_classes, activation='sigmoid', name='pyramid_classification_sigmoid')(outputs)
-
+    # outputs = keras.layers.Dropout(0.5)(outputs) 
+    # outputs = keras.layers.Dense(num_classes, activation='sigmoid', name='pyramid_classification_sigmoid')(outputs)
+    outputs = keras.layers.Activation('sigmoid', name='pyramid_classification_sigmoid')(outputs)
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
 
@@ -292,6 +292,8 @@ def retinanet(
         ```
     """
     if submodels is None:
+        # submodels = [('classification', default_classification_model(num_classes, num_anchors))]
+
         submodels = default_submodels(num_classes, num_anchors)
 
     C3, C4, C5 = backbone_layers

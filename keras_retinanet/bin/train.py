@@ -22,6 +22,7 @@ import os
 import sys
 import warnings
 
+import numpy as np
 import keras
 import keras.preprocessing.image
 from keras.utils import multi_gpu_model
@@ -329,6 +330,7 @@ def main(args=None):
             freeze_backbone=args.freeze_backbone
         )
 
+    # og_model, og_training_model, og_prediction_model =  
     # print model summary
     print(model.summary())
 
@@ -358,23 +360,31 @@ def main(args=None):
 
         # Temp filler 
         image_names = train_generator.image_names
-        
+        selection = image_names[0:4]
+        print(selection)
+        raw_image = train_generator.load_image(0)
+        image = train_generator.preprocess_image(raw_image.copy())
+        image, scale = train_generator.resize_image(image) 
+        a,b,c = prediction_model.predict_on_batch(np.expand_dims(image, axis=0)) 
         # NOTE: this is the function we actually want to call to get the next batch based on the acquisition function 
         # TODO: figure out the error 
         # image_names = get_next_batch(train_generator, training_model, train_annotations, args.batch_size)
 
-        # create generator from selected batch_indices 
+        # create generator from selected batch_indices
+        print("starting batch creation") 
         batch_generator = PascalVocBatchGenerator(args.pascal_path,
             'trainval',
-            image_names,
-            transform_generator=transform_generator,
+            selection,
             batch_size=args.batch_size,
+            transform_generator=transform_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side)
 
+        # 
+        print("finished batch creation")
         training_model.fit_generator(
             generator=batch_generator,
-            steps_per_epoch=1,
+            steps_per_epoch=5,
             epochs=1,
             verbose=1,
             callbacks=callbacks,

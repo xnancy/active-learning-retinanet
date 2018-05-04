@@ -7,6 +7,7 @@ from ..utils.eval import _get_detections
 import numpy as np
 import os
 
+import keras
 import cv2
 import pickle
 
@@ -82,17 +83,39 @@ def get_next_batch(
     # Returns
         A dict mapping class names to mAP scores.
     """
-    # gather all detections and annotations
-    all_detections     = _get_detections(generator, model, score_threshold=score_threshold, max_detections=max_detections, save_path=save_path)
-    average_precisions = {}
 
-    acquisitions = acquisition_function(all_detections, all_annotations, generator)
+    nb_MC_samples = 100
+    MC_output = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
+    learning_phase = True  # use dropout at test time
+    image_group = generator.load_image_group(np.arange(generator.size()))
+    # max_shape = tuple(max(image.shape[x] for image in image_group) for x in range(3))
+    # image_batch = np.zeros((generator.size(),)+max_shape, dtype=keras.backend.floatx())
+    score = np.zeros((generator.size(),))
+    for image_index, image in enumerate(image_group):
+        print(image.shape)
+        print(image_batch.shape)
+        score[image_index] = 1
+        # image_batch[image_index, :image.shape[0], :image.shape[1], :image.shape[2]] = image
+    # inputs = image_batch
+    print("input dims")
+    print(inputs.shape)
+    MC_samples = [MC_output([inputs, learning_phase])[0] for _ in xrange(nb_MC_samples)]
+    print("mc samples")
+    print(MC_samples.shape)
+    MC_samples = np.array(MC_samples)    # [#samples x batch size x #classes]
+    
+
+    # gather all detections and annotations
+    # all_detections     = _get_detections(generator, model, score_threshold=score_threshold, max_detections=max_detections, save_path=save_path)
+    # average_precisions = {}
+
+    # acquisitions = acquisition_function(all_detections, all_annotations, generator)
 
     # select pool indices with highest acquisition functions 
-    pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
+    # pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
 
     # return names of pool files 
-    return generator.image_names[pool_indices]
+    return generator.image_names[0:batch_size]
 
 
     """ 
