@@ -351,35 +351,26 @@ def main(args=None):
     )
 
     ## EDITING STARTS HERE 
-    # create training set (pool)
-    train_annotations = _get_annotations(train_generator)
-     
+    # train_annotations = _get_annotations(train_generator)
     image_names = train_generator.image_names
-    # batch_generator = PascalVocBatchGenerator(args.pascal_path,
-        # 'trainval',
-        # image_names,
-        # batch_size=args.batch_size,
-        # transform_generator=transform_generator,
-        # image_min_side=args.image_min_side,
-        # image_max_side=args.image_max_side)
 
-    # start training: we use num-acquisitions and batch_size 
-    for i in range(args.num_acquisitions):
-        print("THE SIZE IS")
-        print(train_generator.size()) 
-
-        # Temp filler 
-        # raw_image = train_generator.load_image(0)
-        # image = train_generator.preprocess_image(raw_image.copy())
-        # image, scale = train_generator.resize_image(image) 
-        # a,b,c = prediction_model.predict_on_batch(np.expand_dims(image, axis=0)) 
-        # NOTE: this is the function we actually want to call to get the next batch based on the acquisition function 
-        # TODO: figure out the error 
-        image_batch = get_next_batch(train_generator, training_model, train_annotations, args.batch_size)
-        # group = np.arange(3000)
-        # inputs, targets = batch_generator.compute_input_output(group)
-        # valid_inputs, valid_targets = validation_generator.next()
+    # start training: we use num-acquisitions and batch_size
+    # smaller training generator for faster testing, containing only 10 images 
+    train_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
+        'trainval',
+        image_names[:10],
+        batch_size=1,
+        transform_generator=transform_generator,
+        image_min_side=args.image_min_side,
+        image_max_side=args.image_max_side)
         
+    for i in range(args.num_acquisitions):
+        print("Starting acquisition", i)
+        
+        # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
+        image_batch = get_next_batch(train_generator_smaller, training_model, args.batch_size)
+        
+        # generator that feeds acquisition samples 1-by-1 for training in model.fit  
         batch_generator = PascalVocBatchGenerator(args.pascal_path,
             'trainval',
             image_batch,
@@ -388,8 +379,7 @@ def main(args=None):
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side)
         assert(batch_generator.size() == args.batch_size)
-        # training_model.fit(inputs, targets, batch_size=10, epochs=5, validation_data = (valid_inputs, valid_targets), callbacks = callbacks)        
-        print("finished training")
+        
         training_model.fit_generator(
             generator=batch_generator,
             steps_per_epoch=args.batch_size,
@@ -397,6 +387,6 @@ def main(args=None):
             verbose=1,
             callbacks=callbacks,
         )
-
+       
 if __name__ == '__main__':
     main()
