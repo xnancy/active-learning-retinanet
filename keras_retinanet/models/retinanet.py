@@ -72,7 +72,7 @@ def default_classification_model(
     
     # add dropout 1 and dense 
     outputs = keras.layers.Dropout(0.5)(outputs) 
-    outputs = keras.layers.Dense(1024, activation='sigmoid')(outputs)
+    outputs = keras.layers.Dense(1024)(outputs)
 
     # add dropout 2
     outputs = keras.layers.Dropout(0.5)(outputs) 

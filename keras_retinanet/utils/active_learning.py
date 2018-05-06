@@ -103,6 +103,8 @@ def get_next_batch(
         print(image.shape)
         MC_samples_classification = [MC_output_classification([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
         MC_samples_classification = np.array(MC_samples_classification)
+        print("Classfication example")
+        print(MC_samples_classification[0])
         MC_samples_regression = [MC_output_regression([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
         MC_samples_regression = np.array(MC_samples_regression)
 
