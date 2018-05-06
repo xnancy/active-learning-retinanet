@@ -135,8 +135,8 @@ def get_next_batch(
     # pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
 
     # return names of pool file
-    # top_scores = np.argpartition(scores, -batch_size)[-batch_size:] 
-    return generator.image_names[:batch_size]
+    top_scores = np.argpartition(scores, -batch_size)[-batch_size:] 
+    return scores[top_scores]
 
 
     """ 
