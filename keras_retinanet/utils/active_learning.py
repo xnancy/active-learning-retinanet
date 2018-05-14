@@ -11,12 +11,28 @@ import keras
 import cv2
 import pickle
 
-# acquisition function values given detections from model and true annotations
-def acquisition_function(model, image): 
-        """ 
-        # TODO: run all elements of training set through stochastic forward pass of model (TODO) and compute acquisition
-        """	
-	return np.zeros(generator.size())
+def BALD_acquisition_function(image, model, nb_MC_samples = 20): 
+        # Classifaction + Regression model functions 
+        MC_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
+        MC_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output]) 
+
+        learning_phase = True  # use dropout at test time
+
+        # Classification + Regression MC functions 
+        MC_samples_classification = [MC_output_classification([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        MC_samples_classification = np.array(MC_samples_classification)
+        MC_samples_regression = [MC_output_regression([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        MC_samples_regression = np.array(MC_samples_regression)
+        MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
+        
+        # compute BALD Acquisition using MC samples on image 
+        expected_entropy = - np.mean(np.sum(MC_samples_classification_squeezed * np.log(MC_samples_classification_squeezed + 1e-10), axis=-1), axis=0)  # [batch size]
+        expected_p = np.mean(MC_samples_classification_squeezed, axis=0)
+        entropy_expected_p = - np.sum(expected_p * np.log(expected_p + 1e-10), axis=-1)  # [batch size]
+        BALD_acq = entropy_expected_p - expected_entropy
+        BALD_acq = np.array(BALD_acq)
+
+        return np.mean(BALD_acq)
 
 def create_batch_generator(file_names):
     # create random transform generator for augmenting training data
@@ -76,55 +92,19 @@ def get_next_batch(
         A dict mapping class names to mAP scores.
     """
 
-    nb_MC_samples = 100
-    print("building function")
-    MC_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
-    MC_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output]) 
-
-    print(keras.backend.shape(model.layers[-1].output))
-    learning_phase = True  # use dropout at test time
-
     # all of the pool images
     # image_group: # batches x [image dims]
-    print("starting image group")
+    image_names = generator.image_names
     image_group = generator.load_image_group(np.arange(generator.size()))
     image_group = np.asarray(image_group)
-    print("finish image group")
-    # image_group = generator.load_image(0)
-    # image_group = np.expand_dims(image_group, axis = 0)
-    print(image_group.shape)
-    # max_shape = tuple(max(image.shape[x] for image in image_group) for x in range(3))
-    # image_batch = np.zeros((generator.size(),)+max_shape, dtype=keras.backend.floatx())
+    
     scores = np.zeros((generator.size(),))
    
     for i in range(generator.size()): 
         image = image_group[i]
         image = np.expand_dims(image, axis = 0)
-        print(image.shape)
-        MC_samples_classification = [MC_output_classification([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
-        MC_samples_classification = np.array(MC_samples_classification)
-        print("Classfication example")
-        print(MC_samples_classification[0])
-        MC_samples_regression = [MC_output_regression([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
-        MC_samples_regression = np.array(MC_samples_regression)
-
         
-    # for image_index, image in enumerate(image_group):
-        #score[image_index] = acquisition_function()
-        # image_batch[image_index, :image.shape[0], :image.shape[1], :image.shape[2]] = image
-    # MC_samples_classification: nb_samples x 1 x # anchors x 20 (# classes) 
-    # MC_samples_regression: nb_samples x 1 x # anchors x 4 (anchor)
-        # compute acquisition as average of the standard BALD acquisition function over all anchors
-        MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
-        expected_entropy = - np.mean(np.sum(MC_samples_classification_squeezed * np.log(MC_samples_classification_squeezed + 1e-10), axis=-1), axis=0)  # [batch size]
-        expected_p = np.mean(MC_samples_classification_squeezed, axis=0)
-        entropy_expected_p = - np.sum(expected_p * np.log(expected_p + 1e-10), axis=-1)  # [batch size]
-        BALD_acq = entropy_expected_p - expected_entropy
-        BALD_acq = np.array(BALD_acq)
-        print(BALD_acq)
-        scores[i] = np.mean(BALD_acq)
-
-    
+        scores[i] = BALD_acquisition_function(image, model, nb_MC_samples = 20)
     
 
     # gather all detections and annotations
@@ -137,8 +117,9 @@ def get_next_batch(
     # pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
 
     # return names of pool file
-    top_scores = np.argpartition(scores, -batch_size)[-batch_size:] 
-    return scores[top_scores]
+    top_scores = np.argpartition(scores, -batch_size)[-batch_size:]
+    acquired_images = [image_names[i] for i in top_scores]
+    return acquired_images
 
 
     """ 

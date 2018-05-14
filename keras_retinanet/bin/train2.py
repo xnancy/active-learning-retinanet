@@ -358,18 +358,19 @@ def main(args=None):
     # smaller training generator for faster testing, containing only 10 images 
     train_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
         'trainval',
-        image_names[:10],
+        image_names[:3],
         batch_size=1,
         transform_generator=transform_generator,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
-        
+    
+    # for when using smaller train generator
+    assert(args.batch_size < 5)
     for i in range(args.num_acquisitions):
         print("Starting acquisition", i)
         
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
         image_batch = get_next_batch(train_generator_smaller, training_model, args.batch_size)
-        
         # generator that feeds acquisition samples 1-by-1 for training in model.fit  
         batch_generator = PascalVocBatchGenerator(args.pascal_path,
             'trainval',
@@ -378,6 +379,7 @@ def main(args=None):
             transform_generator=transform_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side)
+
         assert(batch_generator.size() == args.batch_size)
         
         training_model.fit_generator(

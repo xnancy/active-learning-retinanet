@@ -101,6 +101,11 @@ class PascalVocBatchGenerator(Generator):
         return self.labels[label]
 
     def image_aspect_ratio(self, image_index):
+        
+        print ("data dir", self.data_dir)
+        print("image", self.image_names[image_index])
+        print("extension", self.image_extension)
+        print("add", self.image_names[image_index] + self.image_extension)
         path  = os.path.join(self.data_dir, 'JPEGImages', self.image_names[image_index] + self.image_extension)
         image = Image.open(path)
         return float(image.width) / float(image.height)
