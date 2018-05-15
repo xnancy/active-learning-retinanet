@@ -366,6 +366,7 @@ def main(args=None):
     
     # for when using smaller train generator
     assert(args.batch_size < 5)
+    print(model.layers)
     for i in range(args.num_acquisitions):
         print("Starting acquisition", i)
         

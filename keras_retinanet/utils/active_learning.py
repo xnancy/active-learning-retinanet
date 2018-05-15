@@ -13,16 +13,21 @@ import pickle
 
 def BALD_acquisition_function(image, model, nb_MC_samples = 20): 
         # Classifaction + Regression model functions 
-        MC_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
-        MC_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output]) 
-
+        model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
+        # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
+        # feature pyramid output nodes fed into classification submodel 
+        model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
+        # classification submodel from feature pyramid outputs 
+        model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
         learning_phase = True  # use dropout at test time
 
         # Classification + Regression MC functions 
-        MC_samples_classification = [MC_output_classification([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        print(image.shape)
+        pyramid_output = model_output_pyramid([image, learning_phase])
+        MC_samples_classification = [model_pyramid_classification([pyramid_output[0], pyramid_output[1], pyramid_output[2], pyramid_output[3], pyramid_output[4], learning_phase])[0] for _ in xrange(nb_MC_samples)]
         MC_samples_classification = np.array(MC_samples_classification)
-        MC_samples_regression = [MC_output_regression([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
-        MC_samples_regression = np.array(MC_samples_regression)
+        # MC_samples_regression = [model_output_regression([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        # MC_samples_regression = np.array(MC_samples_regression)
         MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
         
         # compute BALD Acquisition using MC samples on image 
