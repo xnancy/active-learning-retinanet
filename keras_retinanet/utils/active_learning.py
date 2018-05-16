@@ -11,24 +11,25 @@ import keras
 import cv2
 import pickle
 
-def BALD_acquisition_function(image, model, nb_MC_samples = 20): 
+def BALD_acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20): 
         # Classifaction + Regression model functions 
-        model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
+        # model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
         # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
         # feature pyramid output nodes fed into classification submodel 
-        model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
+        # model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
         # classification submodel from feature pyramid outputs 
-        model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
+        # model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
         learning_phase = True  # use dropout at test time
 
         # Classification + Regression MC functions 
         pyramid_output = model_output_pyramid([image, learning_phase])
-        MC_samples_classification = [model_pyramid_classification([pyramid_output[0], pyramid_output[1], pyramid_output[2], pyramid_output[3], pyramid_output[4], learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        # tiled_input = np.tile(pyramid_output, (20,1,1,1) )
+        # MC_samples_classification = [model_pyramid_classification([pyramid_output[0], pyramid_output[1], pyramid_output[2], pyramid_output[3], pyramid_output[4], learning_phase])[0] for _ in xrange(nb_MC_samples)]
+        MC_samples_classification = model_pyramid_classification([np.tile(pyramid_output[0], (20,1,1,1)), np.tile(pyramid_output[1], (20,1,1,1)), np.tile(pyramid_output[2],(20,1,1,1)), np.tile(pyramid_output[3],(20,1,1,1)), np.tile(pyramid_output[4],(20,1,1,1)), learning_phase])
         MC_samples_classification = np.array(MC_samples_classification)
         # MC_samples_regression = [model_output_regression([image, learning_phase])[0] for _ in xrange(nb_MC_samples)]
         # MC_samples_regression = np.array(MC_samples_regression)
         MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
-        
         # compute BALD Acquisition using MC samples on image 
         expected_entropy = - np.mean(np.sum(MC_samples_classification_squeezed * np.log(MC_samples_classification_squeezed + 1e-10), axis=-1), axis=0)  # [batch size]
         expected_p = np.mean(MC_samples_classification_squeezed, axis=0)
@@ -82,6 +83,9 @@ def create_batch_generator(file_names):
 def get_next_batch(
     generator,
     model,
+    model_output_classification,
+    model_output_pyramid,
+    model_pyramid_classification, 
     batch_size, score_threshold = 0.05, max_detections=100, save_path=None
 ):
     """ Evaluate a given dataset using a given model.
@@ -108,7 +112,7 @@ def get_next_batch(
         image = image_group[i]
         image = np.expand_dims(image, axis = 0)
         
-        scores[i] = BALD_acquisition_function(image, model, nb_MC_samples = 20)
+        scores[i] = BALD_acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20)
     
 
     # gather all detections and annotations

@@ -372,17 +372,26 @@ def main(args=None):
         transform_generator=transform_generator,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
-    
+     
+    # Classifaction + Regression model functions 
+    model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
+    # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
+    # feature pyramid output nodes fed into classification submodel 
+    model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
+    # classification submodel from feature pyramid outputs 
+    model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
+
     # for when using smaller train generator
     acquisition_start_time = time.time()
 
     for i in range(args.num_acquisitions):
+        # keras.backend.clear_session()
         print("Elapsed time since last acquisition", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_start_time)))
         acquisition_start_time = time.time() 
         print("Starting acquisition", i)
         
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
-        image_batch = get_next_batch(train_generator_smaller, training_model, args.batch_size)
+        image_batch = get_next_batch(train_generator_smaller, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.batch_size)
         # generator that feeds acquisition samples 1-by-1 for training in model.fit  
         batch_finish_time = time.time()
         print("Time to acquire batch", time.strftime("%H:%M:%S", time.gmtime(batch_finish_time - acquisition_start_time)))
