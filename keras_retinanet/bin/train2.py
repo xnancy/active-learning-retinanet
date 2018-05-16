@@ -346,7 +346,7 @@ def main(args=None):
     
     validation_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
         'trainval', 
-        image_names[400:420],
+        image_names[3000:3020],
         batch_size = 20,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
@@ -367,7 +367,7 @@ def main(args=None):
     # smaller training generator for faster testing, containing only 10 images 
     train_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
         'trainval',
-        image_names[:400],
+        image_names[:3000],
         batch_size=1,
         transform_generator=transform_generator,
         image_min_side=args.image_min_side,
