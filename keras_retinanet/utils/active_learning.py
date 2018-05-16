@@ -22,7 +22,6 @@ def BALD_acquisition_function(image, model, nb_MC_samples = 20):
         learning_phase = True  # use dropout at test time
 
         # Classification + Regression MC functions 
-        print(image.shape)
         pyramid_output = model_output_pyramid([image, learning_phase])
         MC_samples_classification = [model_pyramid_classification([pyramid_output[0], pyramid_output[1], pyramid_output[2], pyramid_output[3], pyramid_output[4], learning_phase])[0] for _ in xrange(nb_MC_samples)]
         MC_samples_classification = np.array(MC_samples_classification)

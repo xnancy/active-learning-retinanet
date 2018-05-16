@@ -21,6 +21,7 @@ import functools
 import os
 import sys
 import warnings
+import time 
 
 import numpy as np
 import keras
@@ -340,34 +341,44 @@ def main(args=None):
         train_generator.compute_anchor_targets = compute_anchor_targets
         if validation_generator is not None:
             validation_generator.compute_anchor_targets = compute_anchor_targets
+    
+    image_names = train_generator.image_names
+    
+    validation_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
+        'trainval', 
+        image_names[400:420],
+        batch_size = 20,
+        image_min_side=args.image_min_side,
+        image_max_side=args.image_max_side)
 
     # create the callbacks
     callbacks = create_callbacks(
         model,
         training_model,
         prediction_model,
-        validation_generator,
+        validation_generator_smaller,
         args,
     )
 
     ## EDITING STARTS HERE 
     # train_annotations = _get_annotations(train_generator)
-    image_names = train_generator.image_names
 
     # start training: we use num-acquisitions and batch_size
     # smaller training generator for faster testing, containing only 10 images 
     train_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
         'trainval',
-        image_names[:3],
+        image_names[:400],
         batch_size=1,
         transform_generator=transform_generator,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
     
     # for when using smaller train generator
-    assert(args.batch_size < 5)
-    print(model.layers)
+    current_time = time.time()
+
     for i in range(args.num_acquisitions):
+        print("Elapsed time since last acquisition", time.strftime("%H:%M:%S", time.gmtime(time.time() - current_time)))
+        current_time = time.time() 
         print("Starting acquisition", i)
         
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
