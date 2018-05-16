@@ -374,16 +374,19 @@ def main(args=None):
         image_max_side=args.image_max_side)
     
     # for when using smaller train generator
-    current_time = time.time()
+    acquisition_start_time = time.time()
 
     for i in range(args.num_acquisitions):
-        print("Elapsed time since last acquisition", time.strftime("%H:%M:%S", time.gmtime(time.time() - current_time)))
-        current_time = time.time() 
+        print("Elapsed time since last acquisition", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_start_time)))
+        acquisition_start_time = time.time() 
         print("Starting acquisition", i)
         
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
         image_batch = get_next_batch(train_generator_smaller, training_model, args.batch_size)
         # generator that feeds acquisition samples 1-by-1 for training in model.fit  
+        batch_finish_time = time.time()
+        print("Time to acquire batch", time.strftime("%H:%M:%S", time.gmtime(batch_finish_time - acquisition_start_time)))
+
         batch_generator = PascalVocBatchGenerator(args.pascal_path,
             'trainval',
             image_batch,
@@ -391,6 +394,8 @@ def main(args=None):
             transform_generator=transform_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side)
+        generator_finish_time = time.time()
+        print("Time to create batch generator", time.strftime("%H:%M:%S", time.gmtime(generator_finish_time - batch_finish_time)))
 
         assert(batch_generator.size() == args.batch_size)
         
@@ -401,6 +406,9 @@ def main(args=None):
             verbose=1,
             callbacks=callbacks,
         )
+        fit_finish_time = time.time()
+
+        print("Time to finish fitting generator", time.strftime("%H:%M:%S", time.gmtime(fit_finish_time - generator_finish_time))) 
        
 if __name__ == '__main__':
     main()
