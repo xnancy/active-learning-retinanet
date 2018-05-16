@@ -71,8 +71,10 @@ def default_classification_model(
     outputs = keras.layers.Reshape((-1, num_classes), name='pyramid_classification_reshape')(outputs)
     
     # add dropout 1 and dense 
-    outputs = keras.layers.Dropout(0.5)(outputs) 
+    outputs = keras.layers.Dropout(0.5)(outputs)
+    print("first output shape", outputs.shape) 
     outputs = keras.layers.Dense(1024)(outputs)
+    print("second output shape", outputs.shape)
 
     # add dropout 2
     outputs = keras.layers.Dropout(0.5)(outputs) 
