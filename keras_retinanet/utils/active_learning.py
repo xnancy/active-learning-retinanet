@@ -80,13 +80,16 @@ def create_batch_generator(file_names):
 
     return train_generator, validation_generator
 
-def get_next_batch(
+def get_next_acquisition(
     generator,
     model,
     model_output_classification,
     model_output_pyramid,
     model_pyramid_classification, 
-    batch_size, score_threshold = 0.05, max_detections=100, save_path=None
+    acquisition_size, 
+    score_threshold = 0.05, 
+    max_detections=100, 
+    save_path=None
 ):
     """ Evaluate a given dataset using a given model.
     # Arguments
@@ -125,9 +128,9 @@ def get_next_batch(
     # pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
 
     # return names of pool file
-    top_scores = np.argpartition(scores, -batch_size)[-batch_size:]
-    acquired_images = [image_names[i] for i in top_scores]
-    return acquired_images
+    top_scores_index = np.argpartition(scores, -acquisition_size)[-acquisition_size:]
+    acquired_images = [image_names[i] for i in top_scores_index]
+    return top_scores_index, acquired_images
 
 
     """ 

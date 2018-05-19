@@ -28,6 +28,7 @@ import keras.preprocessing.image
 from keras.utils import multi_gpu_model
 import tensorflow as tf
 
+
 # Allow relative imports when being executed as script.
 if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -51,7 +52,7 @@ from ..utils.anchors import make_shapes_callback, anchor_targets_bbox
 from ..utils.keras_version import check_keras_version
 from ..utils.model import freeze as freeze_model
 from ..utils.transform import random_transform_generator
-from ..utils.eval import _get_annotations, _get_detections
+from ..utils.eval import _get_annotations, _get_detections, evaluate
 from ..utils.active_learning import get_next_batch
 
 
@@ -333,7 +334,14 @@ def main(args=None):
     # og_model, og_training_model, og_prediction_model =  
     # print model summary
     print(model.summary())
+    average_precisions = evaluate(validation_generator, prediction_model)
 
+    # print evaluation
+    for label, average_precision in average_precisions.items():
+        print(validation_generator.label_to_name(label), '{:.4f}'.format(average_precision))
+    
+    print('mAP: {:.4f}'.format(sum(average_precisions.values()) / len(average_precisions)))
+"""
     # this lets the generator compute backbone layer shapes using the actual backbone model
     if 'vgg' in args.backbone or 'densenet' in args.backbone:
         compute_anchor_targets = functools.partial(anchor_targets_bbox, shapes_callback=make_shapes_callback(model))
@@ -389,6 +397,7 @@ def main(args=None):
             verbose=1,
             callbacks=callbacks,
         )
+"""
 
 if __name__ == '__main__':
     main()

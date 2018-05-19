@@ -22,6 +22,7 @@ import os
 import sys
 import warnings
 import time 
+import random 
 
 import numpy as np
 import keras
@@ -53,7 +54,7 @@ from ..utils.keras_version import check_keras_version
 from ..utils.model import freeze as freeze_model
 from ..utils.transform import random_transform_generator
 from ..utils.eval import _get_annotations, _get_detections
-from ..utils.active_learning import get_next_batch
+from ..utils.active_learning import get_next_acquisition
 
 
 def makedirs(path):
@@ -287,6 +288,12 @@ def parse_args(args):
     parser.add_argument('--image-min-side', help='Rescale the image so the smallest side is min_side.', type=int, default=800)
     parser.add_argument('--image-max-side', help='Rescale the image if the largest side is larger than max_side.', type=int, default=1333)
     parser.add_argument('--num-acquisitions', help='Number of acquisitions to run', type=int, default=10)
+    parser.add_argument('--pool-size', help='Number of images in oracle pool, <5011 for PASCAL', type=int, default=5011)
+    parser.add_argument('--validation-size', help='Number of images in validation, <4952 for PASCAL', type=int, default=4952)
+    parser.add_argument('--epochs-per-acquisition', help="Number of epochs trained per new acquistion", type=int, default=3)
+    parser.add_argument('--initial-train-size', help='Number of images in initial training pool, randomly selected from oracle pool, <pool-size', type=int, default=500)
+    parser.add_argument('--acquisition-size', help='Number of images from oracle / acquisition', type = int, default=10)
+    parser.add_argument('--initial-training-epochs', help="Numbero of epochs to train initial pool", type = int, default=10)
 
     return check_args(parser.parse_args(args))
 
@@ -301,6 +308,12 @@ def main(args=None):
 
     # make sure keras is the minimum required version
     check_keras_version()
+
+    # check acquisition parameters are valid
+    if args.dataset_type == 'pascal': 
+        assert(args.pool_size <= 5011)
+        assert(args.validation_size <= 4952)
+    assert(args.initial_train_size + args.acquisition_size * args.num_acquisitions <= args.pool_size)
 
     # optionally choose specific GPU
     if args.gpu:
@@ -343,11 +356,12 @@ def main(args=None):
             validation_generator.compute_anchor_targets = compute_anchor_targets
     
     image_names = train_generator.image_names
+    validation_image_names = validation_generator.image_names
     
-    validation_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
-        'trainval', 
-        image_names[3000:3020],
-        batch_size = 20,
+    validation_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
+        'test', 
+        random.sample(validation_image_names, args.validation_size),
+        batch_size = args.batch_size,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
 
@@ -356,22 +370,43 @@ def main(args=None):
         model,
         training_model,
         prediction_model,
-        validation_generator_smaller,
+        validation_pool_generator,
         args,
     )
 
-    ## EDITING STARTS HERE 
     # train_annotations = _get_annotations(train_generator)
 
     # start training: we use num-acquisitions and batch_size
     # smaller training generator for faster testing, containing only 10 images 
-    train_generator_smaller = PascalVocBatchGenerator(args.pascal_path, 
+    initial_pool = random.sample(image_names, args.pool_size)
+    initial_training_pool_indices = random.sample(range(args.pool_size), args.initial_train_size)
+    initial_oracle_pool = np.delete(initial_pool, initial_training_pool_indices)
+    initial_training_pool = np.take(initial_pool, initial_training_pool_indices)
+    
+    oracle_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
         'trainval',
-        image_names[:3000],
-        batch_size=1,
+        initial_oracle_pool,
+        batch_size=args.batch_size,
         transform_generator=transform_generator,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
+
+    training_pool_generator = PascalVocBatchGenerator(args.pascal_path,
+        'trainval',
+        initial_training_pool, 
+        batch_size=args.batch_size,
+        transform_generator=transform_generator,
+        image_min_side=args.image_min_side,
+        image_max_side=args.image_max_side)
+
+    training_model.fit_generator(
+        generator=training_pool_generator,
+        epochs=args.initial_training_epochs,
+        steps_per_epoch = int(training_pool_generator.size() / args.batch_size),
+        verbose=1,
+        callbacks=callbacks,
+    )
+
      
     # Classifaction + Regression model functions 
     model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
@@ -381,43 +416,58 @@ def main(args=None):
     # classification submodel from feature pyramid outputs 
     model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
 
-    # for when using smaller train generator
-    acquisition_start_time = time.time()
-
     for i in range(args.num_acquisitions):
         # keras.backend.clear_session()
-        print("Elapsed time since last acquisition", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_start_time)))
-        acquisition_start_time = time.time() 
-        print("Starting acquisition", i)
-        
-        # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
-        image_batch = get_next_batch(train_generator_smaller, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.batch_size)
-        # generator that feeds acquisition samples 1-by-1 for training in model.fit  
-        batch_finish_time = time.time()
-        print("Time to acquire batch", time.strftime("%H:%M:%S", time.gmtime(batch_finish_time - acquisition_start_time)))
+        print("Elapsed time since last acquisition cycle", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_cycle_start_time)))
+        acquisition_cycle_start_time = time.time()
 
-        batch_generator = PascalVocBatchGenerator(args.pascal_path,
+        print("Starting acquisition", i)
+        # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
+        top_scores_index, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.acquisition_size)
+
+        # generator that feeds acquisition samples 1-by-1 for training in model.fit  
+        acquisition_end_time = time.time()
+        print("Time to get acquisitions", time.strftime("%H:%M:%S", acquisition_end_time- acquisition_cycle_start_time))
+        
+        print("Creating new oracle pool and training sets")
+        new_oracle_pool = np.delete(oracle_pool_generator.image_names, top_scores_index) 
+        new_training_pool = np.concatenate(training_pool_generator.image_names, acquired_images)
+
+        oracle_pool_generator = PascalVocBatchGenerator(
+            args.pascal_path, 
             'trainval',
-            image_batch,
-            batch_size=1,
+            new_oracle_pool, 
+            batch_size=args.batch_size, 
+            transform_generator=transform_generator,
+            image_min_side=args.image_min_side,
+            image_max_side=args.image_max_side
+        )
+
+        training_pool_generator = PascalVocBatchGenerator(args.pascal_path,
+            'trainval',
+            new_training_pool,
+            batch_size=args.batch_size,
             transform_generator=transform_generator,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side)
-        generator_finish_time = time.time()
-        print("Time to create batch generator", time.strftime("%H:%M:%S", time.gmtime(generator_finish_time - batch_finish_time)))
 
-        assert(batch_generator.size() == args.batch_size)
+        generator_end_time = time.time()
+
+        print("Time to create new generators", time.strftime("%H:%M:%S", generator_end_time - acquisition_end_time))
+
+
+        print("Starting training", i)
         
         training_model.fit_generator(
-            generator=batch_generator,
-            steps_per_epoch=args.batch_size,
-            epochs=1,
+            generator=training_pool_generator,
+            epochs=args.epochs-per-acquisition,
+            steps_per_epoch=int(args.training_pool_generator.size() / args.batch_size),
             verbose=1,
             callbacks=callbacks,
         )
-        fit_finish_time = time.time()
-
-        print("Time to finish fitting generator", time.strftime("%H:%M:%S", time.gmtime(fit_finish_time - generator_finish_time))) 
-       
+        
+        training_end_time = time.time() 
+        print("Training time", time.strftime("%H:%M:%S", time.gmtime(training_end_time - generator_tned_time)))
+              
 if __name__ == '__main__':
     main()
