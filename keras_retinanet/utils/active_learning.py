@@ -6,6 +6,7 @@ from ..utils.eval import _get_detections
 
 import numpy as np
 import os
+import random 
 
 import keras
 import cv2
@@ -19,6 +20,7 @@ def BALD_acquisition_function(image, model, model_output_classification, model_o
         # model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
         # classification submodel from feature pyramid outputs 
         # model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
+        """
         learning_phase = True  # use dropout at test time
 
         # Classification + Regression MC functions 
@@ -36,8 +38,10 @@ def BALD_acquisition_function(image, model, model_output_classification, model_o
         entropy_expected_p = - np.sum(expected_p * np.log(expected_p + 1e-10), axis=-1)  # [batch size]
         BALD_acq = entropy_expected_p - expected_entropy
         BALD_acq = np.array(BALD_acq)
-
+        
         return np.mean(BALD_acq)
+        """
+        return random.random()
 
 def create_batch_generator(file_names):
     # create random transform generator for augmenting training data
