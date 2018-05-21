@@ -12,7 +12,7 @@ import keras
 import cv2
 import pickle
 
-def BALD_acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20): 
+def acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20): 
         # Classifaction + Regression model functions 
         # model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
         # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
@@ -90,7 +90,8 @@ def get_next_acquisition(
     model_output_classification,
     model_output_pyramid,
     model_pyramid_classification, 
-    acquisition_size, 
+    acquisition_size,
+    pool_indices,  
     score_threshold = 0.05, 
     max_detections=100, 
     save_path=None
@@ -110,16 +111,14 @@ def get_next_acquisition(
     # all of the pool images
     # image_group: # batches x [image dims]
     image_names = generator.image_names
-    image_group = generator.load_image_group(np.arange(generator.size()))
-    image_group = np.asarray(image_group)
     
-    scores = np.zeros((generator.size(),))
+    scores = np.ones((generator.size(),)) * -10000
    
-    for i in range(generator.size()): 
-        image = image_group[i]
+    for i in pool_indices: 
+        image = generator.load_image(i)
         image = np.expand_dims(image, axis = 0)
         
-        scores[i] = BALD_acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20)
+        scores[i] = acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20)
     
 
     # gather all detections and annotations
@@ -132,9 +131,9 @@ def get_next_acquisition(
     # pool_indices = acquisition[0].argsort()[-batch_size:][::-1]
 
     # return names of pool file
-    top_scores_index = np.argpartition(scores, -acquisition_size)[-acquisition_size:]
-    acquired_images = [image_names[i] for i in top_scores_index]
-    return top_scores_index, acquired_images
+    top_scores_indices = np.argpartition(scores, -acquisition_size)[-acquisition_size:]
+    acquired_images = [image_names[i] for i in top_scores_indices]
+    return top_scores_indices, acquired_images
 
 
     """ 

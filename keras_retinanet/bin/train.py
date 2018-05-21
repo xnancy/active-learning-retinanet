@@ -382,7 +382,7 @@ def main(args=None):
     initial_training_pool_indices = random.sample(range(args.pool_size), args.initial_train_size)
     initial_oracle_pool = np.delete(initial_pool, initial_training_pool_indices)
     initial_training_pool = np.take(initial_pool, initial_training_pool_indices)
-    
+     
     oracle_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
         'trainval',
         initial_oracle_pool,
@@ -391,6 +391,8 @@ def main(args=None):
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
 
+    oracle_pool_indices = set(range(initial_oracle_pool.size))
+
     training_pool_generator = PascalVocBatchGenerator(args.pascal_path,
         'trainval',
         initial_training_pool, 
@@ -398,6 +400,8 @@ def main(args=None):
         transform_generator=transform_generator,
         image_min_side=args.image_min_side,
         image_max_side=args.image_max_side)
+
+    acquisition_cycle_start_time = time.time()
 
     training_model.fit_generator(
         generator=training_pool_generator,
@@ -415,7 +419,7 @@ def main(args=None):
     model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
     # classification submodel from feature pyramid outputs 
     model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
-
+  
     for i in range(args.num_acquisitions):
         # keras.backend.clear_session()
         print("Elapsed time since last acquisition cycle", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_cycle_start_time)))
@@ -423,25 +427,18 @@ def main(args=None):
 
         print("Starting acquisition", i)
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
-        top_scores_index, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.acquisition_size)
+        top_scores_indices, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.acquisition_size, oracle_pool_indices)
 
         # generator that feeds acquisition samples 1-by-1 for training in model.fit  
         acquisition_end_time = time.time()
-        print("Time to get acquisitions", time.strftime("%H:%M:%S", acquisition_end_time- acquisition_cycle_start_time))
+        print("Time to get acquisitions", time.strftime("%H:%M:%S", time.gmtime(acquisition_end_time- acquisition_cycle_start_time)))
         
         print("Creating new oracle pool and training sets")
-        new_oracle_pool = np.delete(oracle_pool_generator.image_names, top_scores_index) 
-        new_training_pool = np.concatenate(training_pool_generator.image_names, acquired_images)
+        oracle_pool_indices = oracle_pool_indices.difference(top_scores_indices)
+        new_training_pool = np.concatenate([training_pool_generator.image_names, acquired_images])
 
-        oracle_pool_generator = PascalVocBatchGenerator(
-            args.pascal_path, 
-            'trainval',
-            new_oracle_pool, 
-            batch_size=args.batch_size, 
-            transform_generator=transform_generator,
-            image_min_side=args.image_min_side,
-            image_max_side=args.image_max_side
-        )
+        
+        del training_pool_generator 
 
         training_pool_generator = PascalVocBatchGenerator(args.pascal_path,
             'trainval',
@@ -453,21 +450,21 @@ def main(args=None):
 
         generator_end_time = time.time()
 
-        print("Time to create new generators", time.strftime("%H:%M:%S", generator_end_time - acquisition_end_time))
+        print("Time to create new generators", time.strftime("%H:%M:%S", time.gmtime(generator_end_time - acquisition_end_time)))
 
 
         print("Starting training", i)
         
         training_model.fit_generator(
             generator=training_pool_generator,
-            epochs=args.epochs-per-acquisition,
-            steps_per_epoch=int(args.training_pool_generator.size() / args.batch_size),
+            epochs=args.epochs_per_acquisition,
+            steps_per_epoch=int(training_pool_generator.size() / args.batch_size),
             verbose=1,
             callbacks=callbacks,
         )
         
         training_end_time = time.time() 
-        print("Training time", time.strftime("%H:%M:%S", time.gmtime(training_end_time - generator_tned_time)))
+        print("Training time", time.strftime("%H:%M:%S", time.gmtime(training_end_time - generator_end_time)))
               
 if __name__ == '__main__':
     main()
