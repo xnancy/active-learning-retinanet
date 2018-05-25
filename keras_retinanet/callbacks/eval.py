@@ -63,6 +63,11 @@ class Evaluate(keras.callbacks.Callback):
             self.tensorboard.writer.add_summary(summary, epoch)
 
         if self.verbose == 1:
-            for label, average_precision in average_precisions.items():
-                print(self.generator.label_to_name(label), '{:.4f}'.format(average_precision))
-            print('mAP: {:.4f}'.format(self.mean_ap))
+            with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-uniform-acquisition-evaluation-log.txt", "a") as myfile:
+                for label, average_precision in average_precisions.items():
+                    print(self.generator.label_to_name(label), '{:.4f}'.format(average_precision))
+                    myfile.write(self.generator.label_to_name(label) + '{:.4f}'.format(average_precision) + "\n")
+                
+                print('mAP: {:.4f}'.format(self.mean_ap) + "\n")
+                myfile.write('mAP: {:.4f}'.format(self.mean_ap))
+            

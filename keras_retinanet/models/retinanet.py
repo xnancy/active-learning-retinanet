@@ -72,11 +72,11 @@ def default_classification_model(
     
     # add dense 
     print("first output shape", outputs.shape) 
-    # outputs = keras.layers.Dense(1024)(outputs)
+    outputs = keras.layers.Dense(1024)(outputs)
     print("second output shape", outputs.shape)
 
     # add dropout
-    # outputs = keras.layers.Dropout(0.5)(outputs) 
+    outputs = keras.layers.Dropout(0.5)(outputs) 
     outputs = keras.layers.Dense(num_classes, activation='sigmoid', name='pyramid_classification_sigmoid')(outputs)
     # outputs = keras.layers.Activation('sigmoid', name='pyramid_classification_sigmoid')(outputs)
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)

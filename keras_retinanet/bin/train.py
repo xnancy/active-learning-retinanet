@@ -403,15 +403,19 @@ def main(args=None):
 
     acquisition_cycle_start_time = time.time()
 
-    training_model.fit_generator(
+    history_callback = training_model.fit_generator(
         generator=training_pool_generator,
         epochs=args.initial_training_epochs,
         steps_per_epoch = int(training_pool_generator.size() / args.batch_size),
         verbose=1,
         callbacks=callbacks,
     )
-
-     
+    loss_history = history_callback.history["loss"]
+    numpy_loss_history = np.array(loss_history)
+    with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-uniform-acquisition-loss-history.txt", "a") as myfile:
+        myfile.write(''.join(str(item) for item in numpy_loss_history))
+        myfile.write('\n')
+ 
     # Classifaction + Regression model functions 
     model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
     # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
@@ -426,6 +430,8 @@ def main(args=None):
         acquisition_cycle_start_time = time.time()
 
         print("Starting acquisition", i)
+        with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-uniform-acquisition-evaluation-log.txt", "a") as myfile:
+            myfile.write("Starting acqusition" + str(i))
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
         top_scores_indices, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.acquisition_size, oracle_pool_indices)
 
@@ -455,14 +461,20 @@ def main(args=None):
 
         print("Starting training", i)
         
-        training_model.fit_generator(
+        history_callback = training_model.fit_generator(
             generator=training_pool_generator,
             epochs=args.epochs_per_acquisition,
             steps_per_epoch=int(training_pool_generator.size() / args.batch_size),
             verbose=1,
             callbacks=callbacks,
         )
-        
+        loss_history = history_callback.history["loss"]
+        numpy_loss_history = np.array(loss_history)
+        with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-uniform-acquisition-evaluation-log.txt", "a") as myfile:
+            myfile.write("LOSS")
+            myfile.write(''.join(str(item) for item in numpy_loss_history))
+            myfile.write('\n')
+
         training_end_time = time.time() 
         print("Training time", time.strftime("%H:%M:%S", time.gmtime(training_end_time - generator_end_time)))
               
