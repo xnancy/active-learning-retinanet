@@ -12,7 +12,7 @@ import keras
 import cv2
 import pickle
 
-def acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20): 
+def acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20, alpha=0.25, gamma = 2): 
         # Classifaction + Regression model functions 
         # model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
         # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
@@ -20,7 +20,7 @@ def acquisition_function(image, model, model_output_classification, model_output
         # model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
         # classification submodel from feature pyramid outputs 
         # model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
-        
+        """ 
         learning_phase = True  # use dropout at test time
 
         # Classification + Regression MC functions 
@@ -34,14 +34,43 @@ def acquisition_function(image, model, model_output_classification, model_output
         MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
         # compute BALD Acquisition using MC samples on image 
         expected_entropy = - np.mean(np.sum(MC_samples_classification_squeezed * np.log(MC_samples_classification_squeezed + 1e-10), axis=-1), axis=0)  # [batch size]
-        expected_p = np.mean(MC_samples_classification_squeezed, axis=0)
+         expected_p = np.mean(MC_samples_classification_squeezed, axis=0)
         entropy_expected_p = - np.sum(expected_p * np.log(expected_p + 1e-10), axis=-1)  # [batch size]
         BALD_acq = entropy_expected_p - expected_entropy
         BALD_acq = np.array(BALD_acq)
         
         return np.mean(BALD_acq)
+        """
+        nb_MC_samples = 30
+        learning_phase = True 
+        pyramid_output = model_output_pyramid([image, learning_phase])
+        MC_samples_classification = model_pyramid_classification([np.tile(pyramid_output[0], (nb_MC_samples,1,1,1)), np.tile(pyramid_output[1], (nb_MC_samples,1,1,1)), np.tile(pyramid_output[2],(nb_MC_samples,1,1,1)), np.tile(pyramid_output[3],(nb_MC_samples,1,1,1)), np.tile(pyramid_output[4],(nb_MC_samples,1,1,1)), learning_phase])
+        MC_samples_classification = np.array(MC_samples_classification)
+        # shape of MC_samples_classification_squeezed is (# MC sample x # anchors x # )
+        MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
         
-        # return random.random()
+        """
+        # ALPHA ENTROPY 
+        num1 = np.power(1 - MC_samples_classification_squeezed, 1 - alpha)
+        num2 = np.power(MC_samples_classification_squeezed, alpha)
+        den = num1 + num2
+   
+        # a = np.mean(np.divide(num1,den), axis = 0)
+        # b = np.mean(np.log(np.divide(num1, den)), axis=0)
+        # c = np.mean(np.divide(num2,den), axis = 0)
+        # d = np.mean(np.log(np.divide(num2, den)), axis = 0)
+        
+        return np.sum(- np.multiply(np.mean(np.divide(num1,den), axis = 0), np.mean((1 - alpha) * np.log(1 - MC_samples_classification_squeezed), axis=0)) - np.multiply(np.mean(np.divide(num2,den), axis = 0), np.mean(alpha * np.log(MC_samples_classification_squeezed), axis = 0)) + np.mean(np.log(den),axis=0))
+        """
+   
+        # Gamma + Alpha Variation Ratio 
+        a = np.power(MC_samples_classification_squeezed, alpha * np.power(1 - MC_samples_classification_squeezed, gamma))
+        b = np.power(1 - MC_samples_classification_squeezed, (1 - alpha) * np.power(MC_samples_classification_squeezed, gamma))
+        p_i = np.mean(np.divide(a, a + b), axis = 0)
+        mask = p_i > 0.5 
+        mask = mask.astype(int)
+        p = np.multiply(mask, p_i) + np.multiply(1 - mask, 1 - p_i)
+        return 1 - np.prod(p) 
 
 def create_batch_generator(file_names):
     # create random transform generator for augmenting training data
