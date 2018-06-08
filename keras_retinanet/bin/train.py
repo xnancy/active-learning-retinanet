@@ -155,7 +155,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
     callbacks.append(keras.callbacks.ReduceLROnPlateau(
         monitor  = 'loss',
         factor   = 0.1,
-        patience = 2,
+        patience = 5,
         verbose  = 1,
         mode     = 'auto',
         epsilon  = 0.0001,
@@ -412,28 +412,29 @@ def main(args=None):
     )
     loss_history = history_callback.history["loss"]
     numpy_loss_history = np.array(loss_history)
-    with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-alpha-gamma-variation-acquisition-evaluation-log.txt", "a") as myfile:
+    with open("/users/xnancy/active-learning/training-logs/l1-class-reg-log.txt", "a") as myfile:
         myfile.write(''.join(str(item) for item in numpy_loss_history))
         myfile.write('\n')
  
     # Classifaction + Regression model functions 
     model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
-    # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
+    model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
     # feature pyramid output nodes fed into classification submodel 
     model_output_pyramid = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-8].output, model.layers[-7].output,model.layers[-6].output,model.layers[-11].output,model.layers[-5].output])
     # classification submodel from feature pyramid outputs 
     model_pyramid_classification = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1),model.layers[-3].get_input_at(2),model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-1].output])
-  
+    model_pyramid_regression = keras.backend.function([model.layers[-3].get_input_at(0), model.layers[-3].get_input_at(1), model.layers[-3].get_input_at(2), model.layers[-3].get_input_at(3),model.layers[-3].get_input_at(4), keras.backend.learning_phase()], [model.layers[-2].output])  
+
     for i in range(args.num_acquisitions):
         # keras.backend.clear_session()
         print("Elapsed time since last acquisition cycle", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_cycle_start_time)))
         acquisition_cycle_start_time = time.time()
 
         print("Starting acquisition", i)
-        with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-alpha-gamma-variation-acquisition-evaluation-log.txt", "a") as myfile:
+        with open("/users/xnancy/active-learning/training-logs/l1-class-reg-log.txt", "a") as myfile:
             myfile.write("Starting acqusition" + str(i))
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
-        top_scores_indices, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_pyramid, model_pyramid_classification, args.acquisition_size, oracle_pool_indices)
+        top_scores_indices, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_regression,  model_output_pyramid, model_pyramid_classification,model_pyramid_regression,  args.acquisition_size, oracle_pool_indices)
 
         # generator that feeds acquisition samples 1-by-1 for training in model.fit  
         acquisition_end_time = time.time()
@@ -470,7 +471,7 @@ def main(args=None):
         )
         loss_history = history_callback.history["loss"]
         numpy_loss_history = np.array(loss_history)
-        with open("/users/xnancy/active-learning/training-logs/retinanet-dropout-alpha-gamma-variation-acquisition-evaluation-log.txt", "a") as myfile:
+        with open("/users/xnancy/active-learning/training-logs/l1-class-reg-log.txt", "a") as myfile:
             myfile.write("LOSS")
             myfile.write(''.join(str(item) for item in numpy_loss_history))
             myfile.write('\n')

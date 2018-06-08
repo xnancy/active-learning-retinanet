@@ -15,6 +15,7 @@ limitations under the License.
 """
 
 import keras
+from keras import regularizers
 from .. import initializers
 from .. import layers
 
@@ -55,6 +56,7 @@ def default_classification_model(
             activation='relu',
             name='pyramid_classification_{}'.format(i),
             kernel_initializer=keras.initializers.normal(mean=0.0, stddev=0.01, seed=None),
+            # kernel_regularizer=regularizers.l2(0.01),
             bias_initializer='zeros',
             **options
         )(outputs)
@@ -63,6 +65,7 @@ def default_classification_model(
         filters=num_classes * num_anchors,
         kernel_initializer=keras.initializers.zeros(),
         bias_initializer=initializers.PriorProbability(probability=prior_probability),
+        # kernel_regularizer=regularizers.l2(0.01),
         name='pyramid_classification',
         **options
     )(outputs)
@@ -112,6 +115,7 @@ def default_regression_model(num_anchors, pyramid_feature_size=256, regression_f
             filters=regression_feature_size,
             activation='relu',
             name='pyramid_regression_{}'.format(i),
+            # kernel_regularizer=regularizers.l2(0.01),
             **options
         )(outputs)
 

@@ -22,7 +22,7 @@ def anchor_targets_bbox(
     annotations,
     num_classes,
     mask_shape=None,
-    negative_overlap=0.4,
+    negative_overlap=0.5,
     positive_overlap=0.5,
     **kwargs
 ):

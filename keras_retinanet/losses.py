@@ -13,9 +13,8 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 """
-import numpy as np 
+
 import keras
-import tensorflow as tf 
 from . import backend
 
 
@@ -38,23 +37,17 @@ def focal(alpha=0.25, gamma=2.0):
 
         cls_loss = focal_weight * keras.backend.binary_crossentropy(labels, classification)
 
-        # compute the loss normalizer 
-        # loss_normalizer = keras.backend.log(keras.backend.exp
-        # loss_normalizer = keras.layers.multiply([keras.backend.log(classification), 1 - classification])
-        # loss_normalizer = (keras.layers.multiply([keras.backend.log(classification), (classification) ]))
-        # + keras.backend.exp(keras.layers.multiply([keras.backend.log(1 - classification), (1 - alpha) * classification ** gamma])))
         # compute the normalizer: the number of positive anchors
-        # loss_normalizer  = keras.backend.log(tf.pow(classification, alpha * (1 - classification) ** gamma) )
-        # loss_normalizer = alpha * (1 - classification) ** gamma * keras.backend.log(classification)
-
         normalizer = backend.where(keras.backend.equal(anchor_state, 1))
         normalizer = keras.backend.cast(keras.backend.shape(normalizer)[0], keras.backend.floatx())
         normalizer = keras.backend.maximum(1.0, normalizer)
+        normalizer0 = backend.where(keras.backend.equal(anchor_state, 0))
+        normalizer0 = keras.backend.cast(keras.backend.shape(normalizer0)[0], keras.backend.floatx()) 
+        normalizer0 = keras.backend.maximum(1.0, normalizer0) 
 
-        return (keras.backend.sum(cls_loss)) / normalizer
+        return keras.backend.sum(cls_loss) / (normalizer) 
 
     return _focal
-
 
 def smooth_l1(sigma=3.0):
     sigma_squared = sigma ** 2
@@ -82,8 +75,14 @@ def smooth_l1(sigma=3.0):
         )
 
         # compute the normalizer: the number of positive anchors
-        normalizer = keras.backend.maximum(1, keras.backend.shape(indices)[0])
-        normalizer = keras.backend.cast(normalizer, dtype=keras.backend.floatx())
-        return keras.backend.sum(regression_loss) / normalizer
+        normalizer0 = backend.where(keras.backend.equal(anchor_state, 0))
+        normalizer0 = keras.backend.cast(keras.backend.shape(normalizer0)[0], keras.backend.floatx())
+        normalizer0 = keras.backend.maximum(1.0, normalizer0)
+        normalizer1 = backend.where(keras.backend.equal(anchor_state, 1))
+        normalizer1 = keras.backend.cast(keras.backend.shape(normalizer1)[0], keras.backend.floatx())
+        normalizer1 = keras.backend.maximum(1.0, normalizer1)
+
+        return keras.backend.sum(regression_loss + 0.05 * normalizer0) / (normalizer0 + normalizer1) 
 
     return _smooth_l1
+

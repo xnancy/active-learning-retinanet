@@ -12,7 +12,7 @@ import keras
 import cv2
 import pickle
 
-def acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20, alpha=0.25, gamma = 2): 
+def acquisition_function(image, model, model_output_classification, model_output_regression,  model_output_pyramid, model_pyramid_classification, model_pyramid_regression,  nb_MC_samples = 20, alpha=0.25, gamma = 2): 
         # Classifaction + Regression model functions 
         # model_output_classification = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-1].output]) 
         # model_output_regression = keras.backend.function([model.layers[0].input, keras.backend.learning_phase()], [model.layers[-2].output])
@@ -45,10 +45,14 @@ def acquisition_function(image, model, model_output_classification, model_output
         learning_phase = True 
         pyramid_output = model_output_pyramid([image, learning_phase])
         MC_samples_classification = model_pyramid_classification([np.tile(pyramid_output[0], (nb_MC_samples,1,1,1)), np.tile(pyramid_output[1], (nb_MC_samples,1,1,1)), np.tile(pyramid_output[2],(nb_MC_samples,1,1,1)), np.tile(pyramid_output[3],(nb_MC_samples,1,1,1)), np.tile(pyramid_output[4],(nb_MC_samples,1,1,1)), learning_phase])
+        MC_samples_regression = model_pyramid_regression([np.tile(pyramid_output[0], (nb_MC_samples,1,1,1)), np.tile(pyramid_output[1], (nb_MC_samples,1,1,1)), np.tile(pyramid_output[2],(nb_MC_samples,1,1,1)), np.tile(pyramid_output[3],(nb_MC_samples,1,1,1)), np.tile(pyramid_output[4],(nb_MC_samples,1,1,1)), learning_phase])
+
         MC_samples_classification = np.array(MC_samples_classification)
+        MC_samples_regression = np.array(MC_samples_regression)
         # shape of MC_samples_classification_squeezed is (# MC sample x # anchors x # )
         MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
         
+        MC_samples_regression_squeezed = np.squeeze(MC_samples_regression)
         """
         # ALPHA ENTROPY 
         num1 = np.power(1 - MC_samples_classification_squeezed, 1 - alpha)
@@ -66,11 +70,34 @@ def acquisition_function(image, model, model_output_classification, model_output
         # Gamma + Alpha Variation Ratio 
         a = np.power(MC_samples_classification_squeezed, alpha * np.power(1 - MC_samples_classification_squeezed, gamma))
         b = np.power(1 - MC_samples_classification_squeezed, (1 - alpha) * np.power(MC_samples_classification_squeezed, gamma))
-        p_i = np.mean(np.divide(a, a + b), axis = 0)
-        mask = p_i > 0.5 
-        mask = mask.astype(int)
-        p = np.multiply(mask, p_i) + np.multiply(1 - mask, 1 - p_i)
-        return 1 - np.prod(p) 
+        # p_i = prob that class is 0  
+        p_i = np.mean(np.divide(b, a + b), axis = 0)
+
+        # mask = p_i > 0.5 
+        # mask = mask.astype(int)
+        # p = np.multiply(mask, p_i) + np.multiply(1 - mask, 1 - p_i)
+       
+        # # anchors x # classes  
+        min_prob_class_per_anchor = np.amin(p_i, axis = 1)
+        zero_class_product = np.sum(np.log(p_i), axis = 1)
+        # the max for the classification section 
+        max_onehot_prob = -np.log(min_prob_class_per_anchor ) + zero_class_product + np.log( 1 - min_prob_class_per_anchor)
+        # assume acquisition is based on anchor being posibite (ie. variance vs constant) 
+        reciprocals = -np.log(np.std(MC_samples_regression_squeezed, axis = 0) + 0.005)
+
+        # l1 (median not variance) acquisition
+        medians = np.sort(MC_samples_regression_squeezed, axis = 0)
+        mediansfirst = np.sum(medians[: nb_MC_samples/2, :,:] , axis = 0)
+        medianslast = np.sum(medians[: nb_MC_samples/2 :, :,:], axis = 0)
+        mediandiff = (medianslast - mediansfirst) / nb_MC_samples 
+        # std_one_hot_prod = np.sum(reciprocals, axis = 1) + max_onehot_prob
+        # maximum_prod = np.maximum(std_one_hot_prod, zero_class_product)
+        # score = - np.sum(std_one_hot_prod)
+        score = -np.sum(np.maximum(max_onehot_prob, zero_class_product) + np.sum(mediandiff, axis = 1))
+        return score 
+         
+        # return 1 - np.prod(p)
+
 
 def create_batch_generator(file_names):
     # create random transform generator for augmenting training data
@@ -117,8 +144,10 @@ def get_next_acquisition(
     generator,
     model,
     model_output_classification,
+    model_output_regression,
     model_output_pyramid,
     model_pyramid_classification, 
+    model_pyramid_regression,
     acquisition_size,
     pool_indices,  
     score_threshold = 0.05, 
@@ -147,7 +176,7 @@ def get_next_acquisition(
         image = generator.load_image(i)
         image = np.expand_dims(image, axis = 0)
         
-        scores[i] = acquisition_function(image, model, model_output_classification, model_output_pyramid, model_pyramid_classification, nb_MC_samples = 20)
+        scores[i] = acquisition_function(image, model, model_output_classification, model_output_regression,  model_output_pyramid, model_pyramid_classification, model_pyramid_regression, nb_MC_samples = 20)
     
 
     # gather all detections and annotations
