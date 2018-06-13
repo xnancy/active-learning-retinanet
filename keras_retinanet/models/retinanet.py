@@ -80,12 +80,12 @@ def default_classification_model(
 
     # add dropout
     outputs = keras.layers.Dropout(0.5)(outputs) 
-    outputs = keras.layers.Dense(num_classes, activation='sigmoid', name='pyramid_classification_sigmoid')(outputs)
+    outputs = keras.layers.Dense(num_classes, activation='sigmoid', name='pyramid_classification_sigmoid')(outputs) 
     # outputs = keras.layers.Activation('sigmoid', name='pyramid_classification_sigmoid')(outputs)
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
 
-def default_regression_model(num_anchors, pyramid_feature_size=256, regression_feature_size=256, name='regression_submodel'):
+def default_regression_laplacian_model(num_anchors, pyramid_feature_size=256, regression_feature_size=256, name='regression_submodel'):
     """ Creates the default regression submodel.
 
     Args
@@ -122,8 +122,20 @@ def default_regression_model(num_anchors, pyramid_feature_size=256, regression_f
     outputs = keras.layers.Conv2D(num_anchors * 4, name='pyramid_regression', **options)(outputs)
     outputs = keras.layers.Reshape((-1, 4), name='pyramid_regression_reshape')(outputs)
 
-    return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
+    laplacian_outputs = keras.layers.Dense(4, kernel_initializer = 'zeros', bias_initializer = 'ones', trainable = False)(outputs)
+    laplacian_outputs = keras.layers.Dense(4, activation = 'relu', name = 'laplacian_dense')(laplacian_outputs) 
 
+    # add dense 
+    print("first output shape", outputs.shape) 
+    outputs = keras.layers.Dense(1024)(outputs)
+    print("second output shape", outputs.shape)
+
+    # add dropout
+    outputs = keras.layers.Dropout(0.5)(outputs) 
+    outputs = keras.layers.Dense(4, name='pyramid_regression_linear')(outputs)
+
+    regression_laplacian_outputs = keras.layers.Concatenate(axis=2)([outputs, laplacian_outputs])
+    return keras.models.Model(inputs=inputs, outputs=regression_laplacian_outputs, name=name)
 
 def __create_pyramid_features(C3, C4, C5, feature_size=256):
     """ Creates the FPN layers on top of the backbone features.
@@ -205,8 +217,8 @@ def default_submodels(num_classes, num_anchors):
         A list of tuple, where the first element is the name of the submodel and the second element is the submodel itself.
     """
     return [
-        ('regression', default_regression_model(num_anchors)),
-        ('classification', default_classification_model(num_classes, num_anchors))
+        ('regression_laplacian', default_regression_laplacian_model(num_anchors)),
+        ('classification', default_classification_model(num_classes, num_anchors)),
     ]
 
 

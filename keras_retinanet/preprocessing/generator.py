@@ -21,7 +21,9 @@ import time
 import warnings
 
 import keras
+import tensorflow as tf 
 
+from .. import backend
 from ..utils.anchors import anchor_targets_bbox, bbox_transform
 from ..utils.image import (
     TransformParameters,
@@ -229,6 +231,8 @@ class Generator(object):
         # compute network targets
         targets = self.compute_targets(image_group, annotations_group)
 
+        anchor_state = keras.backend.max(targets[0], axis = 2) 
+        indices = backend.where(keras.backend.equal(anchor_state, 1))
         return inputs, targets
 
     def __next__(self):

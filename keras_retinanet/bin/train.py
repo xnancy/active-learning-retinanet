@@ -99,7 +99,7 @@ def create_models(backbone_retinanet, num_classes, weights, multi_gpu=0, freeze_
     # compile model
     training_model.compile(
         loss={
-            'regression'    : losses.smooth_l1(),
+            'regression_laplacian'    : losses.smooth_l1(),
             'classification': losses.focal()
         },
         optimizer=keras.optimizers.adam(lr=1e-5, clipnorm=0.001)
@@ -118,7 +118,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
         checkpoint = keras.callbacks.ModelCheckpoint(
             os.path.join(
                 args.snapshot_path,
-                '{backbone}_{dataset_type}_{{epoch:02d}}.h5'.format(backbone=args.backbone, dataset_type=args.dataset_type)
+                '{backbone}_{dataset_type}.h5'.format(backbone=args.backbone, dataset_type=args.dataset_type)
             ),
             verbose=1
         )
@@ -155,14 +155,17 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
     callbacks.append(keras.callbacks.ReduceLROnPlateau(
         monitor  = 'loss',
         factor   = 0.1,
-        patience = 5,
+        patience = 3,
         verbose  = 1,
         mode     = 'auto',
         epsilon  = 0.0001,
         cooldown = 0,
         min_lr   = 0
     ))
-
+    callbacks.append(keras.callbacks.EarlyStopping(
+        monitor = 'loss',
+        patience = 2
+    ))
     return callbacks
 
 
@@ -188,7 +191,7 @@ def create_generators(args):
     if args.dataset_type == 'pascal':
         train_generator = PascalVocGenerator(
             args.pascal_path,
-            'trainval',
+            'train',
             transform_generator=transform_generator,
             batch_size=args.batch_size,
             image_min_side=args.image_min_side,
@@ -197,7 +200,7 @@ def create_generators(args):
 
         validation_generator = PascalVocGenerator(
             args.pascal_path,
-            'test',
+            'val',
             batch_size=1,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side
@@ -311,8 +314,8 @@ def main(args=None):
 
     # check acquisition parameters are valid
     if args.dataset_type == 'pascal': 
-        assert(args.pool_size <= 5011)
-        assert(args.validation_size <= 4952)
+        assert(args.pool_size <= 5717)
+        assert(args.validation_size <= 5823)
     assert(args.initial_train_size + args.acquisition_size * args.num_acquisitions <= args.pool_size)
 
     # optionally choose specific GPU
@@ -359,7 +362,7 @@ def main(args=None):
     validation_image_names = validation_generator.image_names
     
     validation_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
-        'test', 
+        'val', 
         random.sample(validation_image_names, args.validation_size),
         batch_size = args.batch_size,
         image_min_side=args.image_min_side,
@@ -384,7 +387,7 @@ def main(args=None):
     initial_training_pool = np.take(initial_pool, initial_training_pool_indices)
      
     oracle_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
-        'trainval',
+        'train',
         initial_oracle_pool,
         batch_size=args.batch_size,
         transform_generator=transform_generator,
@@ -394,7 +397,7 @@ def main(args=None):
     oracle_pool_indices = set(range(initial_oracle_pool.size))
 
     training_pool_generator = PascalVocBatchGenerator(args.pascal_path,
-        'trainval',
+        'train',
         initial_training_pool, 
         batch_size=args.batch_size,
         transform_generator=transform_generator,
@@ -412,7 +415,7 @@ def main(args=None):
     )
     loss_history = history_callback.history["loss"]
     numpy_loss_history = np.array(loss_history)
-    with open("/users/xnancy/active-learning/training-logs/l1-class-reg-log.txt", "a") as myfile:
+    with open("/users/xnancy/active-learning/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
         myfile.write(''.join(str(item) for item in numpy_loss_history))
         myfile.write('\n')
  
@@ -430,9 +433,9 @@ def main(args=None):
         print("Elapsed time since last acquisition cycle", time.strftime("%H:%M:%S", time.gmtime(time.time() - acquisition_cycle_start_time)))
         acquisition_cycle_start_time = time.time()
 
-        print("Starting acquisition", i)
-        with open("/users/xnancy/active-learning/training-logs/l1-class-reg-log.txt", "a") as myfile:
-            myfile.write("Starting acqusition" + str(i))
+        print("Acquisition", i)
+        with open("/users/xnancy/active-learning/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
+            myfile.write("Acquisition " + str(i) + "\n")
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
         top_scores_indices, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_regression,  model_output_pyramid, model_pyramid_classification,model_pyramid_regression,  args.acquisition_size, oracle_pool_indices)
 
@@ -448,7 +451,7 @@ def main(args=None):
         del training_pool_generator 
 
         training_pool_generator = PascalVocBatchGenerator(args.pascal_path,
-            'trainval',
+            'train',
             new_training_pool,
             batch_size=args.batch_size,
             transform_generator=transform_generator,
@@ -471,7 +474,7 @@ def main(args=None):
         )
         loss_history = history_callback.history["loss"]
         numpy_loss_history = np.array(loss_history)
-        with open("/users/xnancy/active-learning/training-logs/l1-class-reg-log.txt", "a") as myfile:
+        with open("/users/xnancy/active-learning/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
             myfile.write("LOSS")
             myfile.write(''.join(str(item) for item in numpy_loss_history))
             myfile.write('\n')

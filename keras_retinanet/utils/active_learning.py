@@ -49,10 +49,14 @@ def acquisition_function(image, model, model_output_classification, model_output
 
         MC_samples_classification = np.array(MC_samples_classification)
         MC_samples_regression = np.array(MC_samples_regression)
-        # shape of MC_samples_classification_squeezed is (# MC sample x # anchors x # )
+        # shape of MC_samples_classification_squeezed is (# MC sample x # anchors x # classes / 4 or 8 for regression laplace)
         MC_samples_classification_squeezed = np.squeeze(MC_samples_classification)
         
         MC_samples_regression_squeezed = np.squeeze(MC_samples_regression)
+        MC_samples_laplacian_squeezed = MC_samples_regression_squeezed[:,:,4:]
+        MC_samples_laplacian_squeezed = np.exp(-MC_samples_laplacian_squeezed)
+        MC_samples_regression_squeezed = MC_samples_regression_squeezed[:,:,:4]
+       
         """
         # ALPHA ENTROPY 
         num1 = np.power(1 - MC_samples_classification_squeezed, 1 - alpha)
@@ -66,7 +70,7 @@ def acquisition_function(image, model, model_output_classification, model_output
         
         return np.sum(- np.multiply(np.mean(np.divide(num1,den), axis = 0), np.mean((1 - alpha) * np.log(1 - MC_samples_classification_squeezed), axis=0)) - np.multiply(np.mean(np.divide(num2,den), axis = 0), np.mean(alpha * np.log(MC_samples_classification_squeezed), axis = 0)) + np.mean(np.log(den),axis=0))
         """
-   
+        """
         # Gamma + Alpha Variation Ratio 
         a = np.power(MC_samples_classification_squeezed, alpha * np.power(1 - MC_samples_classification_squeezed, gamma))
         b = np.power(1 - MC_samples_classification_squeezed, (1 - alpha) * np.power(MC_samples_classification_squeezed, gamma))
@@ -88,13 +92,38 @@ def acquisition_function(image, model, model_output_classification, model_output
         # l1 (median not variance) acquisition
         medians = np.sort(MC_samples_regression_squeezed, axis = 0)
         mediansfirst = np.sum(medians[: nb_MC_samples/2, :,:] , axis = 0)
-        medianslast = np.sum(medians[: nb_MC_samples/2 :, :,:], axis = 0)
+        medianslast = np.sum(medians[nb_MC_samples/2 :, :,:], axis = 0)
         mediandiff = (medianslast - mediansfirst) / nb_MC_samples 
         # std_one_hot_prod = np.sum(reciprocals, axis = 1) + max_onehot_prob
         # maximum_prod = np.maximum(std_one_hot_prod, zero_class_product)
         # score = - np.sum(std_one_hot_prod)
         score = -np.sum(np.maximum(max_onehot_prob, zero_class_product) + np.sum(mediandiff, axis = 1))
-        return score 
+        """
+        
+        # CASE 1, one hot 
+        # from Gamma + Alpha bernoulli 
+        # MAX ONE HOT CLASS PROBS 
+        a = np.power(MC_samples_classification_squeezed, alpha * np.power(1 - MC_samples_classification_squeezed, gamma))
+        b = np.power(1 - MC_samples_classification_squeezed, (1 - alpha) * np.power(MC_samples_classification_squeezed, gamma))  
+        mean_zero_class_prob = np.mean(np.divide(b, a + b), axis = 0)
+        zero_prob_per_anchor = np.sum(np.log(mean_zero_class_prob), axis = 1) 
+        # dim: # anochors x # classes
+        min_class_prob_per_anchor = np.amin(mean_zero_class_prob, axis = 1)
+        # dim: # anchors
+        max_one_hotprob_per_anchor = zero_prob_per_anchor - np.log(min_class_prob_per_anchor) + np.log(1 - min_class_prob_per_anchor)
+        
+        # MAX LAPLACIAN PROBS 
+        medians = np.sort(MC_samples_regression_squeezed, axis = 0)
+        mediansfirst = np.sum(medians[: nb_MC_samples / 2 , :,:], axis = 0) 
+        medianslast = np.sum(medians[nb_MC_samples/ 2 :, :,:], axis = 0) 
+        laplacians = MC_samples_laplacian_squeezed[0]
+        laplacian_max = np.sum((medianslast - mediansfirst) / laplacians - np.log(2 * laplacians), axis = 1)
+        
+        # Max case 1 and case 2 (zero hot prob) 
+        max_per_anchor = np.maximum(laplacian_max + max_one_hotprob_per_anchor, zero_prob_per_anchor)
+
+        # Assume even number of MC samples 
+        return -np.sum(max_per_anchor)
          
         # return 1 - np.prod(p)
 

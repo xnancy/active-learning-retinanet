@@ -36,6 +36,8 @@ def focal(alpha=0.25, gamma=2.0):
         focal_weight = alpha_factor * focal_weight ** gamma
 
         cls_loss = focal_weight * keras.backend.binary_crossentropy(labels, classification)
+        
+        focal_normalizer = keras.backend.log(keras.backend.pow(classification , (alpha * keras.backend.pow((1 - classification) , gamma))) + keras.backend.pow(1 - classification , ((1 - alpha) * keras.backend.pow(classification, gamma))))
 
         # compute the normalizer: the number of positive anchors
         normalizer = backend.where(keras.backend.equal(anchor_state, 1))
@@ -44,25 +46,30 @@ def focal(alpha=0.25, gamma=2.0):
         normalizer0 = backend.where(keras.backend.equal(anchor_state, 0))
         normalizer0 = keras.backend.cast(keras.backend.shape(normalizer0)[0], keras.backend.floatx()) 
         normalizer0 = keras.backend.maximum(1.0, normalizer0) 
-
-        return keras.backend.sum(cls_loss) / (normalizer) 
+        return keras.backend.sum(cls_loss ) 
 
     return _focal
 
 def smooth_l1(sigma=3.0):
     sigma_squared = sigma ** 2
 
+
     def _smooth_l1(y_true, y_pred):
         # separate target and state
-        regression        = y_pred
+        regression        = y_pred[:,:,:4]
+        laplacian         = y_pred[:,:,4:]
         regression_target = y_true[:, :, :4]
         anchor_state      = y_true[:, :, 4]
+        
+        # 4 x 1 
+        laplacian_weights = keras.backend.constant([100,100,100,100])
 
         # filter out "ignore" anchors
         indices           = backend.where(keras.backend.equal(anchor_state, 1))
         regression        = backend.gather_nd(regression, indices)
+        laplacian 	  = backend.gather_nd(laplacian, indices) 
         regression_target = backend.gather_nd(regression_target, indices)
-
+        laplacian         = keras.backend.exp(-laplacian)
         # compute smooth L1 loss
         # f(x) = 0.5 * (sigma * x)^2          if |x| < 1 / sigma / sigma
         #        |x| - 0.5 / sigma / sigma    otherwise
@@ -82,7 +89,8 @@ def smooth_l1(sigma=3.0):
         normalizer1 = keras.backend.cast(keras.backend.shape(normalizer1)[0], keras.backend.floatx())
         normalizer1 = keras.backend.maximum(1.0, normalizer1)
 
-        return keras.backend.sum(regression_loss + 0.05 * normalizer0) / (normalizer0 + normalizer1) 
+        regression_loss_laplacian = keras.layers.multiply([regression_loss, 1 / laplacian]) 
+        return (keras.backend.sum(regression_loss_laplacian) + keras.backend.sum(keras.backend.log(2 * laplacian_weights))) 
 
     return _smooth_l1
 
