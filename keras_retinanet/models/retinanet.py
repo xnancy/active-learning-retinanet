@@ -25,9 +25,9 @@ import numpy as np
 def default_classification_model(
     num_classes,
     num_anchors,
-    pyramid_feature_size=256,
+    pyramid_feature_size=64,
     prior_probability=0.01,
-    classification_feature_size=256,
+    classification_feature_size=64,
     name='classification_submodel'
 ):
     """ Creates the default regression submodel.
@@ -85,7 +85,7 @@ def default_classification_model(
     return keras.models.Model(inputs=inputs, outputs=outputs, name=name)
 
 
-def default_regression_laplacian_model(num_anchors, pyramid_feature_size=256, regression_feature_size=256, name='regression_submodel'):
+def default_regression_laplacian_model(num_anchors, pyramid_feature_size=64, regression_feature_size=64, name='regression_submodel'):
     """ Creates the default regression submodel.
 
     Args
@@ -137,7 +137,7 @@ def default_regression_laplacian_model(num_anchors, pyramid_feature_size=256, re
     regression_laplacian_outputs = keras.layers.Concatenate(axis=2)([outputs, laplacian_outputs])
     return keras.models.Model(inputs=inputs, outputs=regression_laplacian_outputs, name=name)
 
-def __create_pyramid_features(C3, C4, C5, feature_size=256):
+def __create_pyramid_features(C3, C4, C5, feature_size=64):
     """ Creates the FPN layers on top of the backbone features.
 
     Args
