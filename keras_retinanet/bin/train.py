@@ -164,7 +164,7 @@ def create_callbacks(model, training_model, prediction_model, validation_generat
     ))
     callbacks.append(keras.callbacks.EarlyStopping(
         monitor = 'loss',
-        patience = 2
+        patience = 3
     ))
     return callbacks
 
@@ -191,7 +191,7 @@ def create_generators(args):
     if args.dataset_type == 'pascal':
         train_generator = PascalVocGenerator(
             args.pascal_path,
-            'train',
+            'trainval',
             transform_generator=transform_generator,
             batch_size=args.batch_size,
             image_min_side=args.image_min_side,
@@ -200,7 +200,7 @@ def create_generators(args):
 
         validation_generator = PascalVocGenerator(
             args.pascal_path,
-            'val',
+            'test',
             batch_size=1,
             image_min_side=args.image_min_side,
             image_max_side=args.image_max_side
@@ -360,9 +360,11 @@ def main(args=None):
     
     image_names = train_generator.image_names
     validation_image_names = validation_generator.image_names
-    
+    print("VALUES")
+    print(len(validation_image_names))
+    print(args.validation_size) 
     validation_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
-        'val', 
+        'test', 
         random.sample(validation_image_names, args.validation_size),
         batch_size = args.batch_size,
         image_min_side=args.image_min_side,
@@ -381,13 +383,13 @@ def main(args=None):
 
     # start training: we use num-acquisitions and batch_size
     # smaller training generator for faster testing, containing only 10 images 
-    initial_pool = random.sample(image_names, args.pool_size)
-    initial_training_pool_indices = random.sample(range(args.pool_size), args.initial_train_size)
-    initial_oracle_pool = np.delete(initial_pool, initial_training_pool_indices)
-    initial_training_pool = np.take(initial_pool, initial_training_pool_indices)
-     
+    
+    with open("/home/nancy/keras-retinanet-nonweighted-LC-loss-LC-acquisition/keras_retinanet/bin/starter500.txt") as f: 
+        initial_training_pool = [line.rstrip('\n') for line in f]
+    initial_oracle_pool = np.asarray([x for x in image_names if x not in initial_training_pool])
+ 
     oracle_pool_generator = PascalVocBatchGenerator(args.pascal_path, 
-        'train',
+        'trainval',
         initial_oracle_pool,
         batch_size=args.batch_size,
         transform_generator=transform_generator,
@@ -415,7 +417,7 @@ def main(args=None):
     )
     loss_history = history_callback.history["loss"]
     numpy_loss_history = np.array(loss_history)
-    with open("/users/xnancy/active-learning/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
+    with open("/home/nancy/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
         myfile.write(''.join(str(item) for item in numpy_loss_history))
         myfile.write('\n')
  
@@ -434,11 +436,14 @@ def main(args=None):
         acquisition_cycle_start_time = time.time()
 
         print("Acquisition", i)
-        with open("/users/xnancy/active-learning/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
+        with open("/home/nancy/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
             myfile.write("Acquisition " + str(i) + "\n")
         # get next batch to train on based on acquisition function, batch_size = # samples in each acquisition iteration, default is 1 
         top_scores_indices, acquired_images = get_next_acquisition(oracle_pool_generator, training_model, model_output_classification, model_output_regression,  model_output_pyramid, model_pyramid_classification,model_pyramid_regression,  args.acquisition_size, oracle_pool_indices)
 
+        with open("/home/nancy/keras-retinanet-nonweighted-LC-loss-LC-acquisition/keras_retinanet/bin/starter500.txt") as f: 
+            for image in acquired_images: 
+                f.write("%s\n" % image)
         # generator that feeds acquisition samples 1-by-1 for training in model.fit  
         acquisition_end_time = time.time()
         print("Time to get acquisitions", time.strftime("%H:%M:%S", time.gmtime(acquisition_end_time- acquisition_cycle_start_time)))
@@ -474,7 +479,7 @@ def main(args=None):
         )
         loss_history = history_callback.history["loss"]
         numpy_loss_history = np.array(loss_history)
-        with open("/users/xnancy/active-learning/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
+        with open("/home/nancy/training-logs/LC-loss-LC-acquisition.txt", "a") as myfile:
             myfile.write("LOSS")
             myfile.write(''.join(str(item) for item in numpy_loss_history))
             myfile.write('\n')
